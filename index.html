@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мое PWA Приложение</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icons/icon-72x72.png">
+</head>
+<body>
+    <!-- Шапка с кебаб-меню -->
+    <header class="header">
+        <h1 id="page-title">Главная страница</h1>
+        <div class="kebab-menu">
+            <button id="kebab-btn" class="kebab-btn">⋮</button>
+            <div id="kebab-dropdown" class="kebab-dropdown">
+                <a href="#" class="menu-item home-btn" id="go-home">
+                    <span>🏠</span> Главная
+                </a>
+                <button class="menu-item" id="new-section-btn">
+                    <span>➕</span> Новый раздел
+                </button>
+                <div id="sections-list"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Форма создания нового раздела -->
+    <div id="new-section-form" class="new-section-form hidden">
+        <input type="text" id="section-name-input" value="Новый раздел">
+        <button id="save-section-btn">💾 Сохранить</button>
+    </div>
+
+    <!-- Главная страница -->
+    <main id="home-page" class="main-content">
+        <div class="add-post-form">
+            <input type="file" id="image-input" accept="image/*" class="file-input">
+            <textarea id="text-input" placeholder="Введите текст..." class="text-input"></textarea>
+            <button id="add-post-btn" class="add-btn">Добавить пост</button>
+        </div>
+        <div id="home-content" class="content-container"></div>
+    </main>
+
+    <!-- Страница раздела -->
+    <div id="section-page" class="main-content hidden">
+        <div class="section-header">
+            <h2 id="section-title"></h2>
+            <button id="add-card-btn" class="add-btn">➕ Добавить карточку</button>
+        </div>
+        <div id="cards-container" class="cards-container"></div>
+    </div>
+
+    <!-- Модальное окно для карточки -->
+    <div id="card-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="modal-title">Новая карточка</h3>
+            <input type="text" id="card-location" placeholder="Название локации">
+            <input type="file" id="card-image" accept="image/*">
+            <textarea id="card-description" placeholder="Описание"></textarea>
+            <div class="modal-buttons">
+                <button id="cancel-card-btn">Отмена</button>
+                <button id="save-card-btn">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подтверждение удаления -->
+    <div id="confirm-modal" class="modal hidden">
+        <div class="modal-content confirm">
+            <h3>Подтверждение удаления</h3>
+            <p>Вы уверены, что хотите удалить эту карточку?</p>
+            <div class="modal-buttons">
+                <button id="cancel-delete-btn">Отмена</button>
+                <button id="confirm-delete-btn">Удалить</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
