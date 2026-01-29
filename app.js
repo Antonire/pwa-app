@@ -1,167 +1,373 @@
+// Конфигурация Supabase - ЗАМЕНИТЕ НА СВОИ КЛЮЧИ!
+const SUPABASE_URL = 'https://ваш-проект.supabase.co';
+const SUPABASE_ANON_KEY = 'ваш-anon-ключ';
+
+// Инициализация Supabase
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // Состояние приложения
 const state = {
     currentPage: 'home',
     currentSection: null,
-    sections: JSON.parse(localStorage.getItem('sections')) || [],
-    homePosts: JSON.parse(localStorage.getItem('homePosts')) || [],
-    editingCardId: null,
-    deletingCardId: null
+    sections: [],
+    isLoading: false
 };
 
 // DOM элементы
 const elements = {
+    // Кебаб-меню
     kebabBtn: document.getElementById('kebab-btn'),
     kebabDropdown: document.getElementById('kebab-dropdown'),
     goHomeBtn: document.getElementById('go-home'),
     newSectionBtn: document.getElementById('new-section-btn'),
-    newSectionForm: document.getElementById('new-section-form'),
-    sectionNameInput: document.getElementById('section-name-input'),
+    sectionsList: document.getElementById('sections-list'),
+    
+    // Модалки
+    newSectionModal: document.getElementById('new-section-modal'),
+    sectionNameInput: document.getElementById('section-name'),
     saveSectionBtn: document.getElementById('save-section-btn'),
+    cancelSectionBtn: document.getElementById('cancel-section-btn'),
+    
+    // Страницы
     homePage: document.getElementById('home-page'),
     sectionPage: document.getElementById('section-page'),
     pageTitle: document.getElementById('page-title'),
-    sectionsList: document.getElementById('sections-list'),
-    homeContent: document.getElementById('home-content'),
+    
+    // Главная страница
     imageInput: document.getElementById('image-input'),
     textInput: document.getElementById('text-input'),
     addPostBtn: document.getElementById('add-post-btn'),
+    homePostsContainer: document.getElementById('home-posts-container'),
+    
+    // Страница раздела
     sectionTitle: document.getElementById('section-title'),
     cardsContainer: document.getElementById('cards-container'),
     addCardBtn: document.getElementById('add-card-btn'),
+    
+    // Модалка карточки
     cardModal: document.getElementById('card-modal'),
-    confirmModal: document.getElementById('confirm-modal'),
     cardLocation: document.getElementById('card-location'),
-    cardImage: document.getElementById('card-image'),
     cardDescription: document.getElementById('card-description'),
+    cardImageInput: document.getElementById('card-image-input'),
     saveCardBtn: document.getElementById('save-card-btn'),
     cancelCardBtn: document.getElementById('cancel-card-btn'),
+    
+    // Подтверждение удаления
+    confirmModal: document.getElementById('confirm-modal'),
     cancelDeleteBtn: document.getElementById('cancel-delete-btn'),
     confirmDeleteBtn: document.getElementById('confirm-delete-btn')
 };
 
-// Инициализация
-function init() {
-    loadSections();
-    renderHomePage();
-    setupEventListeners();
+// Загрузка данных с Supabase
+async function loadData() {
+    state.isLoading = true;
+    showLoading();
+    
+    try {
+        // Загружаем разделы
+        const { data: sections, error: sectionsError } = await supabase
+            .from('sections')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (sectionsError) throw sectionsError;
+        state.sections = sections || [];
+        
+        // Загружаем посты главной страницы
+        await loadHomePosts();
+        
+        // Рендерим список разделов
+        renderSectionsList();
+        
+    } catch (error) {
+        console.error('Ошибка загрузки данных:', error);
+        alert('Не удалось загрузить данные. Проверьте подключение к интернету.');
+    } finally {
+        state.isLoading = false;
+        hideLoading();
+    }
 }
 
-// Загрузка разделов
-function loadSections() {
-    state.sections = JSON.parse(localStorage.getItem('sections')) || [];
+// Загрузка постов главной страницы
+async function loadHomePosts() {
+    try {
+        const { data: posts, error } = await supabase
+            .from('home_posts')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        renderHomePosts(posts || []);
+    } catch (error) {
+        console.error('Ошибка загрузки постов:', error);
+    }
 }
 
-// Сохранение разделов
-function saveSections() {
-    localStorage.setItem('sections', JSON.stringify(state.sections));
+// Загрузка карточек раздела
+async function loadSectionCards(sectionId) {
+    try {
+        const { data: cards, error } = await supabase
+            .from('cards')
+            .select('*')
+            .eq('section_id', sectionId)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        renderCards(cards || []);
+    } catch (error) {
+        console.error('Ошибка загрузки карточек:', error);
+    }
 }
 
-// Сохранение постов главной страницы
-function saveHomePosts() {
-    localStorage.setItem('homePosts', JSON.stringify(state.homePosts));
+// Загрузка файла в Supabase Storage
+async function uploadFile(file, bucket = 'images') {
+    try {
+        // Создаем уникальное имя файла
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+        const filePath = `${fileName}`;
+        
+        // Загружаем файл
+        const { data, error } = await supabase.storage
+            .from(bucket)
+            .upload(filePath, file);
+        
+        if (error) throw error;
+        
+        // Получаем публичный URL
+        const { data: { publicUrl } } = supabase.storage
+            .from(bucket)
+            .getPublicUrl(filePath);
+        
+        return publicUrl;
+    } catch (error) {
+        console.error('Ошибка загрузки файла:', error);
+        return null;
+    }
 }
 
-// Настройка обработчиков событий
-function setupEventListeners() {
-    // Кебаб-меню
-    elements.kebabBtn.addEventListener('click', toggleKebabMenu);
-    
-    // Переход на главную
-    elements.goHomeBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        showHomePage();
-        closeKebabMenu();
-    });
-    
-    // Новый раздел
-    elements.newSectionBtn.addEventListener('click', showNewSectionForm);
-    elements.saveSectionBtn.addEventListener('click', createNewSection);
-    
-    // Главная страница
-    elements.addPostBtn.addEventListener('click', addHomePost);
-    
-    // Разделы
-    elements.addCardBtn.addEventListener('click', showCardModal);
-    
-    // Модальное окно карточки
-    elements.cancelCardBtn.addEventListener('click', closeCardModal);
-    elements.saveCardBtn.addEventListener('click', saveCard);
-    
-    // Модальное окно подтверждения
-    elements.cancelDeleteBtn.addEventListener('click', closeConfirmModal);
-    elements.confirmDeleteBtn.addEventListener('click', confirmDeleteCard);
-    
-    // Клик вне меню
-    document.addEventListener('click', (e) => {
-        if (!elements.kebabBtn.contains(e.target) && 
-            !elements.kebabDropdown.contains(e.target)) {
-            closeKebabMenu();
+// Создание нового раздела
+async function createSection(name) {
+    try {
+        const { data, error } = await supabase
+            .from('sections')
+            .insert([{ name }])
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        state.sections.unshift(data);
+        renderSectionsList();
+        showSection(data.id);
+        
+        return data;
+    } catch (error) {
+        console.error('Ошибка создания раздела:', error);
+        alert('Не удалось создать раздел');
+        return null;
+    }
+}
+
+// Создание карточки
+async function createCard(cardData) {
+    try {
+        // Загружаем изображение, если есть
+        let imageUrl = null;
+        if (cardData.imageFile) {
+            imageUrl = await uploadFile(cardData.imageFile);
         }
-    });
+        
+        const { data, error } = await supabase
+            .from('cards')
+            .insert([{
+                section_id: cardData.sectionId,
+                location: cardData.location,
+                description: cardData.description,
+                image_url: imageUrl
+            }])
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        // Перезагружаем карточки
+        await loadSectionCards(cardData.sectionId);
+        
+        return data;
+    } catch (error) {
+        console.error('Ошибка создания карточки:', error);
+        alert('Не удалось создать карточку');
+        return null;
+    }
 }
 
-// Управление кебаб-меню
-function toggleKebabMenu() {
-    elements.kebabDropdown.classList.toggle('show');
+// Создание поста на главной
+async function createHomePost(postData) {
+    try {
+        // Загружаем изображение, если есть
+        let imageUrl = null;
+        if (postData.imageFile) {
+            imageUrl = await uploadFile(postData.imageFile);
+        }
+        
+        const { data, error } = await supabase
+            .from('home_posts')
+            .insert([{
+                text: postData.text,
+                image_url: imageUrl
+            }])
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        // Перезагружаем посты
+        await loadHomePosts();
+        
+        return data;
+    } catch (error) {
+        console.error('Ошибка создания поста:', error);
+        alert('Не удалось создать пост');
+        return null;
+    }
 }
 
-function closeKebabMenu() {
-    elements.kebabDropdown.classList.remove('show');
+// Удаление карточки
+async function deleteCard(cardId) {
+    try {
+        const { error } = await supabase
+            .from('cards')
+            .delete()
+            .eq('id', cardId);
+        
+        if (error) throw error;
+        
+        // Перезагружаем карточки текущего раздела
+        if (state.currentSection) {
+            await loadSectionCards(state.currentSection);
+        }
+    } catch (error) {
+        console.error('Ошибка удаления карточки:', error);
+        alert('Не удалось удалить карточку');
+    }
 }
 
-// Управление разделами
-function showNewSectionForm() {
-    closeKebabMenu();
-    elements.newSectionForm.classList.remove('hidden');
-    elements.sectionNameInput.focus();
-    elements.sectionNameInput.select();
+// Удаление раздела
+async function deleteSection(sectionId) {
+    try {
+        const { error } = await supabase
+            .from('sections')
+            .delete()
+            .eq('id', sectionId);
+        
+        if (error) throw error;
+        
+        // Обновляем состояние
+        state.sections = state.sections.filter(s => s.id !== sectionId);
+        renderSectionsList();
+        
+        // Если удалили текущий раздел, переходим на главную
+        if (state.currentSection === sectionId) {
+            showHomePage();
+        }
+    } catch (error) {
+        console.error('Ошибка удаления раздела:', error);
+        alert('Не удалось удалить раздел');
+    }
 }
 
-function createNewSection() {
-    const name = elements.sectionNameInput.value.trim() || 'Новый раздел';
-    const newSection = {
-        id: Date.now().toString(),
-        name: name,
-        cards: []
-    };
-    
-    state.sections.push(newSection);
-    saveSections();
-    
-    elements.newSectionForm.classList.add('hidden');
-    showSection(newSection.id);
-    renderSectionsList();
-}
-
+// Рендеринг функций
 function renderSectionsList() {
     elements.sectionsList.innerHTML = '';
     
     state.sections.forEach(section => {
         const sectionItem = document.createElement('div');
-        sectionItem.className = 'menu-item section-item';
+        sectionItem.className = 'menu-item';
         sectionItem.innerHTML = `
-            <span onclick="showSection('${section.id}')" style="cursor: pointer; flex-grow: 1;">
-                📁 ${section.name}
-            </span>
-            <button class="delete-section-btn" onclick="deleteSection('${section.id}')">×</button>
+            <span>📁 ${section.name}</span>
+            <button class="delete-section-btn" data-id="${section.id}">🗑️</button>
         `;
+        
+        sectionItem.querySelector('.delete-section-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm(`Удалить раздел "${section.name}" и все карточки в нем?`)) {
+                deleteSection(section.id);
+            }
+        });
+        
+        sectionItem.addEventListener('click', () => {
+            showSection(section.id);
+            closeKebabMenu();
+        });
+        
         elements.sectionsList.appendChild(sectionItem);
     });
 }
 
-function deleteSection(sectionId) {
-    if (confirm('Удалить раздел и все карточки в нем?')) {
-        state.sections = state.sections.filter(s => s.id !== sectionId);
-        saveSections();
-        renderSectionsList();
-        
-        if (state.currentSection === sectionId) {
-            showHomePage();
-        }
+function renderHomePosts(posts) {
+    elements.homePostsContainer.innerHTML = '';
+    
+    if (posts.length === 0) {
+        elements.homePostsContainer.innerHTML = `
+            <div class="post">
+                <p style="text-align: center; color: #666;">Пока нет постов. Добавьте первый!</p>
+            </div>
+        `;
+        return;
     }
+    
+    posts.forEach(post => {
+        const postElement = document.createElement('div');
+        postElement.className = 'post';
+        postElement.innerHTML = `
+            ${post.image_url ? `<img src="${post.image_url}" alt="Post" class="card-image">` : ''}
+            <p>${post.text}</p>
+            <div class="card-date">${new Date(post.created_at).toLocaleDateString('ru-RU')}</div>
+        `;
+        elements.homePostsContainer.appendChild(postElement);
+    });
 }
 
-// Управление страницами
+function renderCards(cards) {
+    elements.cardsContainer.innerHTML = '';
+    
+    if (cards.length === 0) {
+        elements.cardsContainer.innerHTML = `
+            <div class="card">
+                <p style="text-align: center; color: #666;">В этом разделе пока нет карточек. Добавьте первую!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    cards.forEach(card => {
+        const cardElement = document.createElement('div');
+        cardElement.className = 'card';
+        cardElement.innerHTML = `
+            <div class="card-header">
+                <h3 class="card-location">${card.location}</h3>
+                <span class="card-date">${new Date(card.created_at).toLocaleDateString('ru-RU')}</span>
+            </div>
+            ${card.image_url ? `<img src="${card.image_url}" alt="${card.location}" class="card-image">` : ''}
+            <p class="card-description">${card.description}</p>
+            <div class="card-actions">
+                <button class="delete-btn" data-id="${card.id}">🗑️ Удалить</button>
+            </div>
+        `;
+        
+        cardElement.querySelector('.delete-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            showConfirmModal(card.id, 'card');
+        });
+        
+        elements.cardsContainer.appendChild(cardElement);
+    });
+}
+
+// Навигация
 function showHomePage() {
     state.currentPage = 'home';
     state.currentSection = null;
@@ -170,10 +376,10 @@ function showHomePage() {
     elements.sectionPage.classList.add('hidden');
     elements.pageTitle.textContent = 'Главная страница';
     
-    renderHomePage();
+    loadHomePosts();
 }
 
-function showSection(sectionId) {
+async function showSection(sectionId) {
     state.currentPage = 'section';
     state.currentSection = sectionId;
     
@@ -185,235 +391,153 @@ function showSection(sectionId) {
     elements.pageTitle.textContent = section.name;
     elements.sectionTitle.textContent = section.name;
     
-    renderSectionCards();
+    await loadSectionCards(sectionId);
 }
 
-// Главная страница
-function addHomePost() {
-    const imageFile = elements.imageInput.files[0];
-    const text = elements.textInput.value.trim();
-    
-    if (!imageFile && !text) {
-        alert('Добавьте фото или текст');
-        return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const newPost = {
-            id: Date.now().toString(),
-            image: imageFile ? e.target.result : null,
-            text: text,
-            date: new Date().toLocaleString('ru-RU')
-        };
-        
-        state.homePosts.unshift(newPost);
-        saveHomePosts();
-        renderHomePage();
-        
-        // Сброс формы
-        elements.imageInput.value = '';
-        elements.textInput.value = '';
-    };
-    
-    if (imageFile) {
-        reader.readAsDataURL(imageFile);
-    } else {
-        const newPost = {
-            id: Date.now().toString(),
-            image: null,
-            text: text,
-            date: new Date().toLocaleString('ru-RU')
-        };
-        
-        state.homePosts.unshift(newPost);
-        saveHomePosts();
-        renderHomePage();
-        elements.textInput.value = '';
-    }
+// Вспомогательные функции
+function showLoading() {
+    // Можно добавить индикатор загрузки
 }
 
-function renderHomePage() {
-    elements.homeContent.innerHTML = '';
-    
-    if (state.homePosts.length === 0) {
-        elements.homeContent.innerHTML = '<p class="empty-state">Пока нет постов</p>';
-        return;
-    }
-    
-    state.homePosts.forEach(post => {
-        const postElement = document.createElement('div');
-        postElement.className = 'post-card';
-        postElement.innerHTML = `
-            ${post.image ? `<img src="${post.image}" alt="Post" class="post-image">` : ''}
-            <div class="post-text">
-                <p>${post.text}</p>
-                <small>${post.date}</small>
-            </div>
-        `;
-        elements.homeContent.appendChild(postElement);
-    });
+function hideLoading() {
+    // Скрыть индикатор загрузки
 }
 
-// Карточки в разделах
+function toggleKebabMenu() {
+    elements.kebabDropdown.classList.toggle('show');
+}
+
+function closeKebabMenu() {
+    elements.kebabDropdown.classList.remove('show');
+}
+
+function showNewSectionModal() {
+    elements.sectionNameInput.value = 'Новый раздел';
+    elements.newSectionModal.classList.remove('hidden');
+    elements.sectionNameInput.focus();
+    elements.sectionNameInput.select();
+}
+
+function hideNewSectionModal() {
+    elements.newSectionModal.classList.add('hidden');
+}
+
 function showCardModal() {
-    elements.editingCardId = null;
     elements.cardLocation.value = '';
-    elements.cardImage.value = '';
     elements.cardDescription.value = '';
+    elements.cardImageInput.value = '';
+    elements.cardModal.classList.remove('hidden');
     document.getElementById('modal-title').textContent = 'Новая карточка';
-    elements.cardModal.classList.remove('hidden');
 }
 
-function closeCardModal() {
+function hideCardModal() {
     elements.cardModal.classList.add('hidden');
-    elements.editingCardId = null;
 }
 
-function saveCard() {
-    const location = elements.cardLocation.value.trim();
-    const description = elements.cardDescription.value.trim();
-    const imageFile = elements.cardImage.files[0];
-    
-    if (!location) {
-        alert('Введите название локации');
-        return;
-    }
-    
-    const section = state.sections.find(s => s.id === state.currentSection);
-    if (!section) return;
-    
-    if (elements.editingCardId) {
-        // Редактирование существующей карточки
-        const card = section.cards.find(c => c.id === elements.editingCardId);
-        if (card) {
-            card.location = location;
-            card.description = description;
-            if (imageFile) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    card.image = e.target.result;
-                    saveSections();
-                    renderSectionCards();
-                    closeCardModal();
-                };
-                reader.readAsDataURL(imageFile);
-            } else {
-                saveSections();
-                renderSectionCards();
-                closeCardModal();
-            }
-        }
-    } else {
-        // Создание новой карточки
-        const newCard = {
-            id: Date.now().toString(),
-            location: location,
-            description: description,
-            date: new Date().toLocaleString('ru-RU')
-        };
-        
-        if (imageFile) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                newCard.image = e.target.result;
-                section.cards.unshift(newCard);
-                saveSections();
-                renderSectionCards();
-                closeCardModal();
-            };
-            reader.readAsDataURL(imageFile);
-        } else {
-            section.cards.unshift(newCard);
-            saveSections();
-            renderSectionCards();
-            closeCardModal();
-        }
-    }
-}
-
-function editCard(cardId) {
-    const section = state.sections.find(s => s.id === state.currentSection);
-    if (!section) return;
-    
-    const card = section.cards.find(c => c.id === cardId);
-    if (!card) return;
-    
-    elements.editingCardId = cardId;
-    elements.cardLocation.value = card.location;
-    elements.cardDescription.value = card.description || '';
-    document.getElementById('modal-title').textContent = 'Редактировать карточку';
-    elements.cardModal.classList.remove('hidden');
-}
-
-function deleteCard(cardId) {
-    elements.deletingCardId = cardId;
+function showConfirmModal(itemId, type) {
     elements.confirmModal.classList.remove('hidden');
+    elements.confirmDeleteBtn.dataset.id = itemId;
+    elements.confirmDeleteBtn.dataset.type = type;
 }
 
-function closeConfirmModal() {
+function hideConfirmModal() {
     elements.confirmModal.classList.add('hidden');
-    elements.deletingCardId = null;
+    elements.confirmDeleteBtn.dataset.id = '';
+    elements.confirmDeleteBtn.dataset.type = '';
 }
-
-function confirmDeleteCard() {
-    const cardId = elements.deletingCardId;
-    if (!cardId) return;
-    
-    const section = state.sections.find(s => s.id === state.currentSection);
-    if (!section) return;
-    
-    section.cards = section.cards.filter(c => c.id !== cardId);
-    saveSections();
-    renderSectionCards();
-    closeConfirmModal();
-}
-
-function renderSectionCards() {
-    elements.cardsContainer.innerHTML = '';
-    
-    const section = state.sections.find(s => s.id === state.currentSection);
-    if (!section) return;
-    
-    // Сортировка по дате (новые выше)
-    const sortedCards = [...section.cards].sort((a, b) => 
-        new Date(b.date) - new Date(a.date)
-    );
-    
-    if (sortedCards.length === 0) {
-        elements.cardsContainer.innerHTML = '<p class="empty-state">Пока нет карточек</p>';
-        return;
-    }
-    
-    sortedCards.forEach(card => {
-        const cardElement = document.createElement('div');
-        cardElement.className = 'card';
-        cardElement.innerHTML = `
-            <div class="card-header">
-                <h3 class="card-title">${card.location}</h3>
-                <span class="card-date">${card.date}</span>
-            </div>
-            ${card.image ? `<img src="${card.image}" alt="${card.location}" class="card-image">` : ''}
-            <p class="card-description">${card.description}</p>
-            <div class="card-actions">
-                <button class="edit-btn" onclick="editCard('${card.id}')">✏️ Редактировать</button>
-                <button class="delete-btn" onclick="deleteCard('${card.id}')">🗑️ Удалить</button>
-            </div>
-        `;
-        elements.cardsContainer.appendChild(cardElement);
-    });
-}
-
-// Добавляем функции в глобальную область видимости
-window.showSection = showSection;
-window.editCard = editCard;
-window.deleteCard = deleteCard;
-window.deleteSection = deleteSection;
 
 // Инициализация приложения
+async function init() {
+    // Настройка обработчиков событий
+    elements.kebabBtn.addEventListener('click', toggleKebabMenu);
+    elements.goHomeBtn.addEventListener('click', showHomePage);
+    elements.newSectionBtn.addEventListener('click', showNewSectionModal);
+    
+    // Модалка раздела
+    elements.saveSectionBtn.addEventListener('click', async () => {
+        const name = elements.sectionNameInput.value.trim();
+        if (name) {
+            await createSection(name);
+            hideNewSectionModal();
+        }
+    });
+    
+    elements.cancelSectionBtn.addEventListener('click', hideNewSectionModal);
+    
+    // Главная страница
+    elements.addPostBtn.addEventListener('click', async () => {
+        const text = elements.textInput.value.trim();
+        const imageFile = elements.imageInput.files[0];
+        
+        if (!text && !imageFile) {
+            alert('Добавьте текст или фото');
+            return;
+        }
+        
+        await createHomePost({ text, imageFile });
+        elements.textInput.value = '';
+        elements.imageInput.value = '';
+    });
+    
+    // Страница раздела
+    elements.addCardBtn.addEventListener('click', showCardModal);
+    
+    // Модалка карточки
+    elements.saveCardBtn.addEventListener('click', async () => {
+        const location = elements.cardLocation.value.trim();
+        const description = elements.cardDescription.value.trim();
+        const imageFile = elements.cardImageInput.files[0];
+        
+        if (!location) {
+            alert('Введите местоположение');
+            return;
+        }
+        
+        await createCard({
+            sectionId: state.currentSection,
+            location,
+            description,
+            imageFile
+        });
+        
+        hideCardModal();
+    });
+    
+    elements.cancelCardBtn.addEventListener('click', hideCardModal);
+    
+    // Подтверждение удаления
+    elements.confirmDeleteBtn.addEventListener('click', async () => {
+        const id = elements.confirmDeleteBtn.dataset.id;
+        const type = elements.confirmDeleteBtn.dataset.type;
+        
+        if (type === 'card') {
+            await deleteCard(id);
+        } else if (type === 'section') {
+            await deleteSection(id);
+        }
+        
+        hideConfirmModal();
+    });
+    
+    elements.cancelDeleteBtn.addEventListener('click', hideConfirmModal);
+    
+    // Клик вне меню
+    document.addEventListener('click', (e) => {
+        if (!elements.kebabBtn.contains(e.target) && 
+            !elements.kebabDropdown.contains(e.target)) {
+            closeKebabMenu();
+        }
+    });
+    
+    // Загрузка данных
+    await loadData();
+    showHomePage();
+}
+
+// Запуск приложения
 document.addEventListener('DOMContentLoaded', init);
 
-// Регистрация Service Worker
+// Service Worker для PWA
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/service-worker.js')
