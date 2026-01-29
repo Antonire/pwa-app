@@ -1,271 +1,173 @@
-// Конфигурация Supabase - ЗАМЕНИТЕ НА СВОИ КЛЮЧИ!
+// Конфигурация Supabase
 const SUPABASE_URL = 'https://ваш-проект.supabase.co';
 const SUPABASE_ANON_KEY = 'ваш-anon-ключ';
 
 // Инициализация Supabase
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Проверка подключения
+// ========== ПРОСТАЯ ПРОВЕРКА ПОДКЛЮЧЕНИЯ ==========
 async function checkSupabaseConnection() {
-    try {
-        console.log('Проверка подключения к Supabase...');
-        const { data, error } = await supabase
-            .from('home_posts')
-            .select('count', { count: 'exact', head: true });
-        
-        if (error) {
-            console.error('❌ Ошибка подключения:', error);
-            return false;
-        }
-        
-        console.log('✅ Подключение к Supabase успешно');
-        return true;
-    } catch (error) {
-        console.error('❌ Ошибка подключения:', error);
-        return false;
-    }
-}
-
-// Состояние приложения
-const state = {
-    currentPage: 'home',
-    currentSection: null,
-    sections: [],
-    isLoading: false
-};
-
-// DOM элементы
-const elements = {
-    // ... (все ваши элементы остаются без изменений) ...
-};
-
-// ========== ИСПРАВЛЕННАЯ ФУНКЦИЯ ЗАГРУЗКИ ФАЙЛА ==========
-async function uploadFile(file, bucket = 'images') {
-    try {
-        console.log('🔄 Начинаю загрузку файла...', {
-            name: file.name,
-            size: file.size,
-            type: file.type
-        });
-        
-        // Создаем уникальное имя БЕЗ кириллицы
-        const timestamp = Date.now();
-        const random = Math.random().toString(36).substring(2, 10);
-        const fileExt = file.name.split('.').pop().toLowerCase() || 'jpg';
-        const fileName = `${timestamp}-${random}.${fileExt}`;
-        
-        console.log('📁 Новое имя файла:', fileName);
-        
-        // Загружаем файл
-        const { data, error } = await supabase.storage
-            .from(bucket)
-            .upload(fileName, file, {
-                cacheControl: '3600',
-                upsert: false
-            });
-        
-        if (error) {
-            console.error('❌ Ошибка загрузки в Storage:', error);
-            
-            // Проверяем существование бакета
-            const { data: buckets } = await supabase.storage.listBuckets();
-            console.log('Доступные бакеты:', buckets);
-            
-            if (!buckets.find(b => b.name === bucket)) {
-                console.error(`❌ Бакет "${bucket}" не найден!`);
-                alert(`Ошибка: бакет "${bucket}" не найден. Создайте его в Supabase Storage.`);
-            }
-            
-            throw error;
-        }
-        
-        console.log('✅ Файл загружен, ID:', data?.id);
-        
-        // Получаем публичный URL
-        const { data: urlData } = supabase.storage
-            .from(bucket)
-            .getPublicUrl(fileName);
-        
-        const publicUrl = urlData?.publicUrl;
-        console.log('🔗 Публичный URL:', publicUrl);
-        
-        return publicUrl;
-        
-    } catch (error) {
-        console.error('🔥 Критическая ошибка загрузки файла:', error);
-        return null;
-    }
-}
-
-// ========== ИСПРАВЛЕННАЯ ФУНКЦИЯ СОЗДАНИЯ ПОСТА ==========
-async function createHomePost(postData) {
-    console.log('📝 Создание нового поста...', postData);
+    console.log('🔍 Проверка подключения к Supabase...');
     
     try {
-        // Валидация
-        if (!postData.text?.trim() && !postData.imageFile) {
-            alert('✏️ Добавьте текст или выберите фото');
-            return null;
-        }
-        
-        let imageUrl = null;
-        
-        // Загрузка изображения (если есть)
-        if (postData.imageFile) {
-            console.log('🖼️ Загружаю изображение...');
-            imageUrl = await uploadFile(postData.imageFile);
-            
-            if (!imageUrl) {
-                console.warn('⚠️ Изображение не загружено, но продолжаем создание поста...');
-                // Продолжаем без изображения
-            }
-        }
-        
-        // Подготовка данных для Supabase
-        const postToInsert = {
-            text: postData.text?.trim() || '',
-            image_url: imageUrl,
-            created_at: new Date().toISOString()
-        };
-        
-        console.log('📤 Отправляю в Supabase:', postToInsert);
-        
-        // Вставляем в базу
-        const { data, error } = await supabase
-            .from('home_posts')
-            .insert([postToInsert])
-            .select()
-            .single();
-        
-        if (error) {
-            console.error('❌ Ошибка Supabase:', error);
-            
-            // Проверяем существование таблицы
-            const { data: tables } = await supabase
-                .from('information_schema.tables')
-                .select('table_name')
-                .eq('table_schema', 'public');
-            
-            console.log('Доступные таблицы:', tables);
-            
-            throw new Error(`Не удалось создать пост: ${error.message}`);
-        }
-        
-        console.log('✅ Пост успешно создан:', data);
-        
-        // Обновляем интерфейс
-        await loadHomePosts();
-        
-        // Очищаем форму
-        elements.textInput.value = '';
-        elements.imageInput.value = '';
-        
-        // Показываем уведомление
-        showNotification('Пост успешно добавлен!', 'success');
-        
-        return data;
-        
-    } catch (error) {
-        console.error('🔥 Ошибка создания поста:', error);
-        
-        // Подробное сообщение об ошибке
-        let errorMessage = 'Неизвестная ошибка';
-        
-        if (error.message.includes('network')) {
-            errorMessage = 'Проблема с интернет-соединением';
-        } else if (error.message.includes('permission')) {
-            errorMessage = 'Нет прав для создания постов. Проверьте RLS политики в Supabase';
-        } else if (error.message.includes('home_posts')) {
-            errorMessage = 'Таблица "home_posts" не найдена. Создайте её в Supabase';
-        } else {
-            errorMessage = error.message;
-        }
-        
-        alert(`❌ Ошибка: ${errorMessage}`);
-        return null;
-    }
-}
-
-// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
-
-// Уведомления
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px 20px;
-        background: ${type === 'success' ? '#4CAF50' : '#ff4444'};
-        color: white;
-        border-radius: 8px;
-        z-index: 9999;
-        animation: slideIn 0.3s ease;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.remove();
-    }, 3000);
-}
-
-// Проверка и создание таблицы (если нужно)
-async function ensureTableExists() {
-    console.log('🔍 Проверяю структуру базы данных...');
-    
-    try {
-        // Проверяем таблицу home_posts
+        // Простая проверка через таблицу home_posts
         const { data, error } = await supabase
             .from('home_posts')
             .select('*')
             .limit(1);
         
-        if (error && error.code === '42P01') { // Таблица не существует
-            console.warn('⚠️ Таблица home_posts не существует!');
+        // Если ошибка связана с таблицей (например, нет прав), но соединение есть
+        if (error) {
+            console.log('📊 Статус подключения к Supabase:', {
+                error: error.message,
+                code: error.code,
+                details: error.details
+            });
             
-            if (confirm('Таблица "home_posts" не найдена. Создать автоматически?')) {
-                // Можно выполнить SQL через Supabase SQL Editor
-                alert('Перейдите в Supabase -> SQL Editor и выполните:\n\n' +
-                      'CREATE TABLE home_posts (\n' +
-                      '  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,\n' +
-                      '  text TEXT,\n' +
-                      '  image_url TEXT,\n' +
-                      '  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()\n' +
-                      ');\n\n' +
-                      'CREATE POLICY "Enable all for anon" ON home_posts\n' +
-                      'FOR ALL USING (true);');
+            // Проверяем тип ошибки
+            if (error.code === '42501' || error.message.includes('permission')) {
+                console.warn('⚠️ Подключение есть, но нет прав к таблице home_posts');
+                console.log('Рекомендация: Проверьте RLS политики в Supabase');
+                return true; // Подключение есть, но нет прав
             }
-        } else {
-            console.log('✅ Таблица home_posts существует');
+            
+            if (error.code === '42P01') {
+                console.warn('⚠️ Таблица home_posts не существует');
+                return true; // Подключение есть, но таблицы нет
+            }
+            
+            console.error('❌ Ошибка подключения:', error);
+            return false;
         }
+        
+        console.log('✅ Подключение к Supabase успешно!');
+        return true;
+        
     } catch (error) {
-        console.error('Ошибка проверки таблицы:', error);
+        console.error('🔥 Критическая ошибка:', error);
+        
+        // Проверяем типичные ошибки
+        if (error.message?.includes('Failed to fetch')) {
+            console.error('❌ Сетевая ошибка или CORS');
+            alert('Проблема с сетью или CORS. Проверьте:\n1. Интернет-соединение\n2. Блокировщики рекламы\n3. CORS настройки в Supabase');
+        } else if (error.message?.includes('Invalid URL')) {
+            console.error('❌ Неправильный URL Supabase');
+            alert('Неправильный URL Supabase. Проверьте:\n1. URL в app.js\n2. URL должен быть: https://ваш-проект.supabase.co');
+        }
+        
+        return false;
     }
 }
 
-// ========== ОСТАЛЬНОЙ КОД ==========
-// ... (остальные функции остаются без изменений, но используйте исправленные версии) ...
+// ========== АЛЬТЕРНАТИВНАЯ ПРОВЕРКА (если нужно) ==========
+async function testSupabaseConnection() {
+    console.log('🧪 Тестирую подключение разными способами...');
+    
+    const tests = {
+        auth: false,
+        storage: false,
+        database: false
+    };
+    
+    try {
+        // Тест 1: Проверка Auth
+        try {
+            const { error } = await supabase.auth.getSession();
+            tests.auth = !error || error.message.includes('not found');
+            console.log(tests.auth ? '✅ Auth доступен' : '❌ Auth ошибка');
+        } catch (e) {
+            console.log('⚠️ Auth тест пропущен');
+        }
+        
+        // Тест 2: Проверка Storage
+        try {
+            const { error } = await supabase.storage.listBuckets();
+            tests.storage = !error;
+            console.log(tests.storage ? '✅ Storage доступен' : '❌ Storage ошибка');
+        } catch (e) {
+            console.log('⚠️ Storage тест пропущен');
+        }
+        
+        // Тест 3: Проверка Database (ваша таблица)
+        try {
+            const { error } = await supabase
+                .from('home_posts')
+                .select('count', { count: 'exact', head: true });
+            tests.database = !error || error.code !== '42501';
+            console.log(tests.database ? '✅ Database доступен' : '❌ Database ошибка');
+        } catch (e) {
+            console.log('⚠️ Database тест пропущен');
+        }
+        
+        // Итог
+        console.log('📊 Результаты тестов:', tests);
+        return tests.auth || tests.storage || tests.database;
+        
+    } catch (error) {
+        console.error('Ошибка тестирования:', error);
+        return false;
+    }
+}
 
-// Инициализация приложения
-async function init() {
-    console.log('🚀 Инициализация приложения...');
+// ========== ИНИЦИАЛИЗАЦИЯ С ПРОВЕРКОЙ ==========
+async function initWithCheck() {
+    console.log('🚀 Инициализация с проверкой подключения...');
+    
+    // Проверяем ключи перед подключением
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || 
+        SUPABASE_URL.includes('ваш-проект') || 
+        SUPABASE_ANON_KEY.includes('ваш-anon-ключ')) {
+        
+        console.error('❌ Ключи Supabase не настроены!');
+        
+        // Создаем уведомление прямо в интерфейсе
+        const warning = document.createElement('div');
+        warning.innerHTML = `
+            <div style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: #ff4444;
+                color: white;
+                padding: 15px;
+                text-align: center;
+                z-index: 9999;
+                font-family: sans-serif;
+            ">
+                ⚠️ Не настроена база данных! Замените ключи в app.js на свои из Supabase
+            </div>
+        `;
+        document.body.appendChild(warning);
+        
+        return;
+    }
     
     // Проверка подключения
     const connected = await checkSupabaseConnection();
+    
     if (!connected) {
-        alert('Не удалось подключиться к базе данных. Проверьте ключи Supabase и интернет-соединение.');
+        // Альтернативная проверка
+        console.log('Пробую альтернативную проверку...');
+        const altConnected = await testSupabaseConnection();
+        
+        if (!altConnected) {
+            console.error('❌ Не удалось подключиться к Supabase');
+            alert('Не удалось подключиться к базе данных. Проверьте:\n\n1. Ключи в app.js\n2. Интернет-соединение\n3. CORS настройки в Supabase');
+            return;
+        }
     }
     
-    // Проверка структуры БД
-    await ensureTableExists();
+    console.log('✅ Подключение установлено, загружаю данные...');
     
-    // ... остальная инициализация ...
+    // Загружаем данные
+    await loadData();
     
-    console.log('✅ Приложение инициализировано');
+    // Показываем главную страницу
+    showHomePage();
+    
+    console.log('✅ Приложение готово!');
 }
 
-// Запуск приложения
-document.addEventListener('DOMContentLoaded', init);
+// Замените ваш текущий вызов инициализации на этот:
+document.addEventListener('DOMContentLoaded', initWithCheck);
