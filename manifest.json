@@ -1,35 +1,15 @@
 {
-    "name": "Мое PWA Приложение",
-    "short_name": "PWA App",
-    "description": "Приложение для создания постов и карточек",
+    "name": "PWA с Базой Данных",
+    "short_name": "PWA DB",
+    "description": "PWA приложение с Supabase базой данных",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#007AFF",
+    "background_color": "#667eea",
+    "theme_color": "#667eea",
     "icons": [
         {
-            "src": "icons/icon-72x72.png",
-            "sizes": "72x72",
-            "type": "image/png"
-        },
-        {
-            "src": "icons/icon-96x96.png",
+            "src": "https://img.icons8.com/color/96/000000/database.png",
             "sizes": "96x96",
-            "type": "image/png"
-        },
-        {
-            "src": "icons/icon-128x128.png",
-            "sizes": "128x128",
-            "type": "image/png"
-        },
-        {
-            "src": "icons/icon-144x144.png",
-            "sizes": "144x144",
-            "type": "image/png"
-        },
-        {
-            "src": "icons/icon-192x192.png",
-            "sizes": "192x192",
             "type": "image/png"
         }
     ]
