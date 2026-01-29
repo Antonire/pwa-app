@@ -1,18 +1,12 @@
-const CACHE_NAME = 'pwa-app-v1';
+const CACHE_NAME = 'pwa-db-app-v1';
 const urlsToCache = [
     '/',
     '/index.html',
     '/styles.css',
     '/app.js',
-    '/manifest.json',
-    '/icons/icon-72x72.png',
-    '/icons/icon-96x96.png',
-    '/icons/icon-128x128.png',
-    '/icons/icon-144x144.png',
-    '/icons/icon-192x192.png'
+    'https://unpkg.com/@supabase/supabase-js@2'
 ];
 
-// Установка Service Worker
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
@@ -22,7 +16,31 @@ self.addEventListener('install', event => {
     );
 });
 
-// Активация и очистка старых кэшей
+self.addEventListener('fetch', event => {
+    event.respondWith(
+        caches.match(event.request)
+            .then(response => {
+                if (response) {
+                    return response;
+                }
+                
+                return fetch(event.request).then(response => {
+                    if (!response || response.status !== 200 || response.type !== 'basic') {
+                        return response;
+                    }
+                    
+                    const responseToCache = response.clone();
+                    caches.open(CACHE_NAME)
+                        .then(cache => {
+                            cache.put(event.request, responseToCache);
+                        });
+                    
+                    return response;
+                });
+            })
+    );
+});
+
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(cacheNames => {
@@ -34,33 +52,5 @@ self.addEventListener('activate', event => {
                 })
             );
         })
-    );
-});
-
-// Стратегия: Cache First, затем сеть
-self.addEventListener('fetch', event => {
-    event.respondWith(
-        caches.match(event.request)
-            .then(response => {
-                if (response) {
-                    return response;
-                }
-                
-                return fetch(event.request).then(
-                    response => {
-                        if (!response || response.status !== 200 || response.type !== 'basic') {
-                            return response;
-                        }
-                        
-                        const responseToCache = response.clone();
-                        caches.open(CACHE_NAME)
-                            .then(cache => {
-                                cache.put(event.request, responseToCache);
-                            });
-                        
-                        return response;
-                    }
-                );
-            })
     );
 });
