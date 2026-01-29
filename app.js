@@ -1,6 +1,6 @@
 // Конфигурация Supabase
-const SUPABASE_URL = 'https://ваш-проект.supabase.co';
-const SUPABASE_ANON_KEY = 'ваш-anon-ключ';
+const SUPABASE_URL = 'https://byoqijcuomiadpvybgow.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5b3FpamN1b21pYWRwdnliZ293Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3MDgxMjgsImV4cCI6MjA4NTI4NDEyOH0.9Cuacy-mJ8FesSyRvHaLdacZIKtnqyAcoyUFAVL5_qQ';
 
 // Инициализация Supabase
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
